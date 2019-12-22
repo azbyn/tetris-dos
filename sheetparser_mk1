@@ -1,0 +1,147 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+open my $file, 'sheet' or die 'couldn\'t open file: $!';
+my %noteTable = (
+    "S0" => "O4, G",
+    "S0s"=> "O4, GS",
+    "S1" => "O4, E",
+    "S1s"=> "O4, ES",
+    "S2" => "O4, C",
+    "S3" => "O3, A",
+    "S3b"=> "O3, GS", #A flat = G#
+    "S4" => "O3, F",
+    "S5" => "O3, D",
+    "S6" => "O2, B",
+    "S7" => "O2, G",
+    "S8" => "O1, E",
+
+    "L0" => "O4, A",
+    "L1" => "O4, F",
+    "L2" => "O4, D",
+    "L3" => "O3, B",
+    "L4" => "O3, G",
+    "L4s"=> "O3, GS",
+    "L5" => "O3, E",
+    "L5s"=> "O3, ES",
+    "L6" => "O3, C",
+    "L7" => "O2, A",
+    "L7b"=> "O2, GS",#A flat = G#
+);
+
+my %bassNoteTable = (
+    "S1" => "O3, G",
+    "S1s"=> "O3, GS",
+    "S2" => "O3, E",
+    "S3" => "O3, C",
+    "S4" => "O2, A",
+    "S5" => "O2, F",
+    "S5s"=> "O2, FS",
+    "S6" => "O2, D",
+    "S7" => "O1, B",
+    "S8" => "O1, G",
+
+    "L1" => "O3, A",
+    "L2" => "O3, F",
+    "L3" => "O3, D",
+    "L4" => "O2, B",
+    "L5" => "O2, G",
+    "L5s"=> "O2, GS",
+    "L6" => "O2, E",
+    "L7" => "O2, C",
+    "L8" => "O1, A",
+);
+my $notesDur = 0;
+my $notes = "";
+my $notes2 = "";
+my $bassNotes = "";
+my $bassNotes2 = "";
+my $isBass = 0;
+
+while (my $line = <$file>) {
+    if ($line =~ /BASS/i) {
+        print("BASS\n");
+        if ($notesDur != 16 and $notesDur != 0) {
+            print("!!!The notes don't add up $notesDur != 16\n");
+        }
+        $notesDur = 0;
+        $isBass = 1;
+    } elsif ($line =~ /TREBLE/i) {
+        print("TREBLE\n");
+        if ($notesDur != 16 and $notesDur != 0) {
+            print("!!!The notes don't add up $notesDur != 16\n");
+        }
+        $notesDur = 0;
+        $isBass = 0;
+    } elsif ($line =~ /LINE/) {
+        print("newLine\n");
+        $notes .= "    //LINE\n";
+        $notes2 .= "    //LINE\n";
+        $bassNotes .= "    //LINE\n";
+        $bassNotes2 .= "    //LINE\n";
+    } elsif ($line =~ /\|/) {
+        if ($notesDur != 16 and $notesDur !=0) {
+            print("!!!The notes don't add up $notesDur != 16\n");
+        }
+        $notesDur = 0;
+        $notes .= "    //|\n";
+        $notes2 .= "    //|\n";
+        $bassNotes .= "    //|\n";
+        $bassNotes2 .= "    //|\n";
+    }
+    elsif ($line =~ s/^([LS][0-9][sb]?)-([0-9]+)//) {
+        my $inc = 16 / $2;
+        $notesDur += $inc;
+        print("N: $1 - $2 (inc $inc, now $notesDur)\n");
+        my $n;
+        if ($isBass) {
+            $n = $bassNoteTable{$1};
+            $bassNotes .= "    { $n, D$2 },\n";
+            if ($line =~ s/,\s*([LS][0-9][sb]?)-([0-9]+)//g) {
+                print("second note: ");
+                my $n2 = $bassNoteTable{$1};
+                print(" $1 - $2 \n");
+
+                unless (defined $n2) {
+                    print("!!! invalid note2 '$1'\n");
+                }
+                $bassNotes2 .= "    { $n2, D$2 },\n";
+            } else {
+                $bassNotes2 .= "    { O0, REST, D$2 },\n";
+            }
+        } else {
+            $n = $noteTable{$1};
+            $notes .= "    { $n, D$2 },\n";
+
+            if ($line =~ s/,\s*([LS][0-9][sb]?)-([0-9]+)//g) {
+                print("second note: ");
+                my $n2 = $noteTable{$1};
+                print(" $1 - $2 \n");
+
+                unless (defined $n2) {
+                    print("!!! invalid note2 '$1'\n");
+                }
+                $notes2 .= "    { $n2, D$2 },\n";
+            } else {
+                $notes2 .= "    { O0, REST, D$2 },\n";
+            }
+        }
+        unless (defined $n) {
+            print("!!! invalid note-1 '$1'\n");
+        }
+    } else {
+        print("!!!INVALID LINE: '$line'\n");
+    }
+    #print "L=$line";
+}
+print("RES:\n");
+open my $out, '>', 'notes.h' or die 'couldn\'t open file: $!';
+print $out ("// -*- mode: C;-*-\n");
+print $out ("#pragma once\n");
+print $out ("#include \"sound_defs.h\"\n\n");
+print $out ("const Sound notes[] = {\n$notes};\n");
+print $out ("const Sound notes2[] = {\n$notes2};\n");
+print $out ("const Sound bassNotes[] = {\n$bassNotes};\n");
+print $out ("const Sound bassNotes2[] = {\n$bassNotes2};\n");
+#print("$err\n");
